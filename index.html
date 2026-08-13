@@ -372,11 +372,21 @@ function cargar(){
       if (!r.ok) throw new Error('El servidor respondió ' + r.status);
       return r.json();
     })
-    .then(function(d){ if (propia === peticion) recibir(d); })
-    .catch(function(){
+    .then(function(d){
       if (propia !== peticion) return;
-      mostrarAviso('error', 'No se pudo obtener el indicador',
-        'Reintentá en unos segundos. Si persiste, revisá que la implementación siga activa.');
+      // El dibujado se aísla: si falla, no es un problema de red y hay que decirlo.
+      try { recibir(d); }
+      catch (err){
+        console.error('Error al dibujar:', err, d);
+        mostrarAviso('error', 'Los datos llegaron pero el tablero no pudo dibujarlos',
+          err.message + '. Suele pasar cuando la implementación del Apps Script quedó en una ' +
+          'versión anterior y devuelve los datos con la forma vieja.');
+      }
+    })
+    .catch(function(err){
+      if (propia !== peticion) return;
+      mostrarAviso('error', 'No se pudo contactar al Apps Script',
+        err.message + '. Revisá que la implementación siga activa y con acceso a cualquier usuario.');
     });
 }
 
