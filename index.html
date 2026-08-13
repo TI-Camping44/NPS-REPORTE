@@ -158,6 +158,122 @@ function pintarPeriodo(p){
   document.getElementById('periodoTexto').textContent = p ? p.etiqueta : '—';
 }
 
+
+/* ── Detalle protegido por clave ──────────────────────────────────────── */
+function claveGuardada(){
+  try { return sessionStorage.getItem('nps_clave') || ''; } catch(e){ return ''; }
+}
+function guardarClave(v){
+  try { v ? sessionStorage.setItem('nps_clave', v) : sessionStorage.removeItem('nps_clave'); } catch(e){}
+}
+
+function pintarBarraDetalle(d){
+  const barra = document.getElementById('barraDetalle');
+  const texto = document.getElementById('detalleTexto');
+  const boton = document.getElementById('btnClave');
+
+  if (!d.detalleHabilitado){ barra.hidden = true; return; }
+  barra.hidden = false;
+
+  if (d.detalle){
+    barra.className = 'barra-detalle abierta';
+    texto.textContent = 'Comentarios y correos visibles en esta sesión.';
+    boton.textContent = 'Ocultar';
+    return;
+  }
+
+  barra.className = 'barra-detalle';
+  texto.textContent = d.claveInvalida
+    ? 'La clave no es correcta. Los comentarios y correos siguen ocultos.'
+    : 'Los comentarios de clientes y los correos están protegidos con clave.';
+  boton.textContent = 'Ver comentarios';
+}
+
+document.getElementById('btnClave').addEventListener('click', function(){
+  if (claveGuardada()){ guardarClave(''); cargar(); return; }
+  const v = window.prompt('Clave para ver comentarios y correos:');
+  if (v === null) return;
+  guardarClave(v.trim());
+  cargar();
+});
+
+function pintarObservaciones(datos){
+  const tarjeta = document.getElementById('tarjetaObs');
+  const ul = document.getElementById('obsLista');
+  ul.innerHTML = '';
+
+  const lista = datos ? datos.lista : null;
+  if (!lista || !lista.length){ tarjeta.hidden = true; return; }
+  tarjeta.hidden = false;
+
+  let pie = lista.length + (lista.length === 1 ? ' comentario' : ' comentarios') +
+            ' · del formulario y de la carga manual de Ventas';
+  if (datos.total > lista.length) pie += ' · se muestran los ' + lista.length + ' más recientes de ' + datos.total;
+  if (datos.ocultasSinFecha) pie += ' · ' + datos.ocultasSinFecha + ' sin fecha de envío quedan fuera del período';
+  document.getElementById('obsPie').textContent = pie;
+
+  lista.forEach(function(o){
+    const li = document.createElement('li');
+
+    const chip = document.createElement('span');
+    chip.className = 'puntaje-chip';
+    chip.textContent = o.puntaje === null || o.puntaje === undefined ? '—' : o.puntaje;
+    chip.style.background = o.puntaje === null || o.puntaje === undefined ? '#9AA6A1'
+      : o.puntaje >= 9 ? 'var(--promotor)'
+      : o.puntaje >= 7 ? 'var(--pasivo)' : 'var(--detractor)';
+
+    const cuerpo = document.createElement('div');
+    cuerpo.className = 'cuerpo';
+
+    const texto = document.createElement('p');
+    texto.className = 'texto';
+    texto.textContent = o.texto || '(sin texto)';
+
+    const meta = document.createElement('p');
+    meta.className = 'meta';
+    [o.fecha, o.origen, o.vendedor, o.equipo]
+      .filter(function(v){ return v; })
+      .forEach(function(v){
+        const s = document.createElement('span');
+        s.textContent = v;
+        meta.appendChild(s);
+      });
+
+    cuerpo.appendChild(texto); cuerpo.appendChild(meta);
+    li.appendChild(chip); li.appendChild(cuerpo);
+    ul.appendChild(li);
+  });
+}
+
+
+function pintarRespondentes(lista){
+  const tarjeta = document.getElementById('tarjetaResp');
+  const cuerpo = document.querySelector('#tablaResp tbody');
+  cuerpo.innerHTML = '';
+
+  if (!lista || !lista.length){ tarjeta.hidden = true; return; }
+  tarjeta.hidden = false;
+
+  const detractores = lista.filter(function(r){ return r.puntaje <= 6; }).length;
+  document.getElementById('respPie').textContent =
+    lista.length + (lista.length === 1 ? ' respondente identificable' : ' respondentes identificables') +
+    (detractores ? ' · ' + detractores + ' con puntaje de detractor' : ' · ninguno detractor');
+
+  lista.forEach(function(r){
+    const tr = document.createElement('tr');
+    [r.fecha, r.correo, r.puntaje].forEach(function(v){
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.appendChild(td);
+    });
+    tr.lastChild.style.color = r.puntaje >= 9 ? 'var(--promotor)'
+      : r.puntaje >= 7 ? 'var(--pasivo)' : 'var(--detractor)';
+    cuerpo.appendChild(tr);
+  });
+}
+
+
+
 /* ── Gráfico ──────────────────────────────────────────────── */
   .grafico{margin-top:16px}
   .grafico-cabecera{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap}
@@ -218,6 +334,58 @@ function pintarPeriodo(p){
   }
   .periodo-activo b{font-family:var(--cifra);font-weight:500}
   .periodo-activo span{color:var(--tinta-suave)}
+
+  .obs{list-style:none;margin:16px 0 0;padding:0}
+  .obs li{display:flex;gap:14px;padding:14px 0;border-top:1px solid var(--linea)}
+  .obs li:first-child{border-top:none}
+  .puntaje-chip{
+    flex:none;width:34px;height:34px;border-radius:8px;color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--cifra);font-size:14px;font-weight:500;
+  }
+  .obs .cuerpo{flex:1;min-width:0}
+  .obs .texto{margin:0;font-size:14px;overflow-wrap:anywhere}
+  .obs .meta{
+    margin:5px 0 0;font-size:11.5px;color:var(--tinta-suave);
+    display:flex;gap:12px;flex-wrap:wrap;font-family:var(--cifra);
+  }
+
+
+  .clasificacion{display:flex;align-items:center;gap:9px;margin:0 0 20px;font-size:13px;line-height:1.35}
+  .clasificacion .marca{
+    flex:none;width:22px;height:22px;border-radius:50%;background:var(--promotor);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;
+  }
+  .clasificacion.falla .marca{background:var(--pasivo)}
+  .meta-marca{
+    position:absolute;top:-2px;width:0;height:12px;
+    border-left:1px dashed rgba(18,33,28,.55);
+  }
+  .meta-nota{
+    position:absolute;top:14px;font-size:10.5px;color:var(--tinta-suave);
+    font-family:var(--cifra);transform:translateX(-50%);white-space:nowrap;
+  }
+
+  #tablaResp td:nth-child(2), #tablaResp th:nth-child(2){text-align:left;font-family:var(--ui)}
+
+
+  .periodo-activo{
+    display:inline-flex;align-items:center;gap:8px;margin-top:14px;
+    background:var(--panel);border:1px solid var(--linea);border-radius:999px;
+    padding:5px 14px;font-size:12.5px;
+  }
+  .periodo-activo b{font-family:var(--cifra);font-weight:500}
+  .periodo-activo span{color:var(--tinta-suave)}
+
+  #tablaResp td:nth-child(2), #tablaResp th:nth-child(2){text-align:left;font-family:var(--ui)}
+
+  .barra-detalle{
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    margin-top:22px;padding:14px 18px;background:var(--panel);
+    border:1px solid var(--linea);border-radius:12px;font-size:13px;
+  }
+  .barra-detalle p{margin:0;color:var(--tinta-suave);flex:1;min-width:200px}
+  .barra-detalle.abierta{border-color:var(--promotor)}
 
   @media (max-width:860px){
     .rejilla{grid-template-columns:1fr}
@@ -352,6 +520,23 @@ function pintarPeriodo(p){
         <th>Período</th><th>NPS</th><th>Promotores</th><th>Pasivos</th><th>Detractores</th><th>Total</th>
       </tr></thead><tbody></tbody></table>
     </section>
+
+    <div class="barra-detalle" id="barraDetalle" hidden>
+      <p id="detalleTexto"></p>
+      <button class="boton" id="btnClave">Ver comentarios</button>
+    </div>
+    <section class="tarjeta" id="tarjetaObs" hidden>
+      <div class="eyebrow">Comentarios del período</div>
+      <p class="fuente" id="obsPie" style="margin:5px 0 0"></p>
+      <ul class="obs" id="obsLista"></ul>
+
+    <section class="tarjeta" id="tarjetaResp" hidden>
+      <div class="eyebrow">Respondentes que dejaron su correo</div>
+      <p class="fuente" id="respPie" style="margin:5px 0 0"></p>
+      <table id="tablaResp"><thead><tr>
+        <th>Fecha</th><th>Correo</th><th>Puntaje</th>
+      </tr></thead><tbody></tbody></table>
+    </section>
   </main>
 </div>
 
@@ -408,6 +593,8 @@ function cargar(){
     desde: estado.desde,
     hasta: estado.hasta
   });
+  const clave = claveGuardada();
+  if (clave) parametros.set('clave', clave);
 
   const propia = ++peticion;
 
@@ -431,6 +618,7 @@ function recibir(d){
   document.getElementById('contenido').classList.remove('cargando');
   ultimaRespuesta = d;
 
+  if (d.claveInvalida) guardarClave('');
   if (!d.ok){ mostrarAviso('error','Indicador no disponible', d.mensaje); return; }
 
   document.getElementById('actualizado').textContent = 'Actualizado ' + (d.actualizado || '—');
@@ -449,6 +637,9 @@ function recibir(d){
   pintarPeriodo(d.periodo);
   pintarClasificacion(d);
   pintarEnvios(d.envios);
+  pintarBarraDetalle(d);
+  pintarObservaciones(d.detalle ? d.detalle.observaciones : null);
+  pintarRespondentes(d.detalle ? d.detalle.respondentes : null);
   pintarTabla(d.serie);
 }
 
@@ -531,6 +722,122 @@ function pintarClasificacion(d){
 function pintarPeriodo(p){
   document.getElementById('periodoTexto').textContent = p ? p.etiqueta : '—';
 }
+
+
+/* ── Detalle protegido por clave ──────────────────────────────────────── */
+function claveGuardada(){
+  try { return sessionStorage.getItem('nps_clave') || ''; } catch(e){ return ''; }
+}
+function guardarClave(v){
+  try { v ? sessionStorage.setItem('nps_clave', v) : sessionStorage.removeItem('nps_clave'); } catch(e){}
+}
+
+function pintarBarraDetalle(d){
+  const barra = document.getElementById('barraDetalle');
+  const texto = document.getElementById('detalleTexto');
+  const boton = document.getElementById('btnClave');
+
+  if (!d.detalleHabilitado){ barra.hidden = true; return; }
+  barra.hidden = false;
+
+  if (d.detalle){
+    barra.className = 'barra-detalle abierta';
+    texto.textContent = 'Comentarios y correos visibles en esta sesión.';
+    boton.textContent = 'Ocultar';
+    return;
+  }
+
+  barra.className = 'barra-detalle';
+  texto.textContent = d.claveInvalida
+    ? 'La clave no es correcta. Los comentarios y correos siguen ocultos.'
+    : 'Los comentarios de clientes y los correos están protegidos con clave.';
+  boton.textContent = 'Ver comentarios';
+}
+
+document.getElementById('btnClave').addEventListener('click', function(){
+  if (claveGuardada()){ guardarClave(''); cargar(); return; }
+  const v = window.prompt('Clave para ver comentarios y correos:');
+  if (v === null) return;
+  guardarClave(v.trim());
+  cargar();
+});
+
+function pintarObservaciones(datos){
+  const tarjeta = document.getElementById('tarjetaObs');
+  const ul = document.getElementById('obsLista');
+  ul.innerHTML = '';
+
+  const lista = datos ? datos.lista : null;
+  if (!lista || !lista.length){ tarjeta.hidden = true; return; }
+  tarjeta.hidden = false;
+
+  let pie = lista.length + (lista.length === 1 ? ' comentario' : ' comentarios') +
+            ' · del formulario y de la carga manual de Ventas';
+  if (datos.total > lista.length) pie += ' · se muestran los ' + lista.length + ' más recientes de ' + datos.total;
+  if (datos.ocultasSinFecha) pie += ' · ' + datos.ocultasSinFecha + ' sin fecha de envío quedan fuera del período';
+  document.getElementById('obsPie').textContent = pie;
+
+  lista.forEach(function(o){
+    const li = document.createElement('li');
+
+    const chip = document.createElement('span');
+    chip.className = 'puntaje-chip';
+    chip.textContent = o.puntaje === null || o.puntaje === undefined ? '—' : o.puntaje;
+    chip.style.background = o.puntaje === null || o.puntaje === undefined ? '#9AA6A1'
+      : o.puntaje >= 9 ? 'var(--promotor)'
+      : o.puntaje >= 7 ? 'var(--pasivo)' : 'var(--detractor)';
+
+    const cuerpo = document.createElement('div');
+    cuerpo.className = 'cuerpo';
+
+    const texto = document.createElement('p');
+    texto.className = 'texto';
+    texto.textContent = o.texto || '(sin texto)';
+
+    const meta = document.createElement('p');
+    meta.className = 'meta';
+    [o.fecha, o.origen, o.vendedor, o.equipo]
+      .filter(function(v){ return v; })
+      .forEach(function(v){
+        const s = document.createElement('span');
+        s.textContent = v;
+        meta.appendChild(s);
+      });
+
+    cuerpo.appendChild(texto); cuerpo.appendChild(meta);
+    li.appendChild(chip); li.appendChild(cuerpo);
+    ul.appendChild(li);
+  });
+}
+
+
+function pintarRespondentes(lista){
+  const tarjeta = document.getElementById('tarjetaResp');
+  const cuerpo = document.querySelector('#tablaResp tbody');
+  cuerpo.innerHTML = '';
+
+  if (!lista || !lista.length){ tarjeta.hidden = true; return; }
+  tarjeta.hidden = false;
+
+  const detractores = lista.filter(function(r){ return r.puntaje <= 6; }).length;
+  document.getElementById('respPie').textContent =
+    lista.length + (lista.length === 1 ? ' respondente identificable' : ' respondentes identificables') +
+    (detractores ? ' · ' + detractores + ' con puntaje de detractor' : ' · ninguno detractor');
+
+  lista.forEach(function(r){
+    const tr = document.createElement('tr');
+    [r.fecha, r.correo, r.puntaje].forEach(function(v){
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.appendChild(td);
+    });
+    tr.lastChild.style.color = r.puntaje >= 9 ? 'var(--promotor)'
+      : r.puntaje >= 7 ? 'var(--pasivo)' : 'var(--detractor)';
+    cuerpo.appendChild(tr);
+  });
+}
+
+
 
 /* ── Gráfico ─────────────────────────────────────────────────── */
 function pintarGrafico(serie, granularidad){
