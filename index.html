@@ -222,6 +222,7 @@
     <div class="grupo">
       <div class="eyebrow">Período</div>
       <div class="chips" id="presets">
+        <button class="chip" data-preset="semana7">Última semana</button>
         <button class="chip" data-preset="mes">Este mes</button>
         <button class="chip" data-preset="mesAnterior">Mes pasado</button>
         <button class="chip" data-preset="dias90">Últimos 90 días</button>
@@ -405,7 +406,11 @@ const colorPuntaje = p => p >= 9 ? 'var(--promotor)' : p >= 7 ? 'var(--pasivo)' 
 function aplicarPreset(nombre){
   const hoy = new Date();
   let desde = null, hasta = hoy;
-  if (nombre === 'mes') desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  if (nombre === 'semana7'){
+    // Siete días corridos hacia atrás: no se corta en el cambio de mes.
+    desde = new Date(hoy); desde.setDate(hoy.getDate() - 6);
+  }
+  else if (nombre === 'mes') desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
   else if (nombre === 'mesAnterior'){
     desde = new Date(hoy.getFullYear(), hoy.getMonth()-1, 1);
     hasta = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
