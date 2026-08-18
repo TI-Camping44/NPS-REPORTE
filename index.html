@@ -833,13 +833,19 @@ function pintarEvolucion(serieCompleta, gran, meta){
   arriba = Math.min(100, Math.ceil((arriba + 4) / 10) * 10);
 
   const y = v => m.top + altoNps - ((v - bajo) / (arriba - bajo)) * altoNps;
-  const paso = serie.length > 1 ? ancho / (serie.length - 1) : 0;
-  const x = i => serie.length > 1 ? m.left + i * paso : m.left + ancho / 2;
+
+  // Margen interno: sin esto, el primer y el último punto caen justo sobre los
+  // bordes y sus barras quedan medio afuera, encimadas a las etiquetas del eje.
+  const separacion = serie.length > 1 ? ancho / (serie.length - 1) : ancho;
+  const bw = Math.max(7, Math.min(34, separacion * 0.36));
+  const margen = bw / 2 + 6;
+  const util = Math.max(1, ancho - margen * 2);
+  const paso = serie.length > 1 ? util / (serie.length - 1) : 0;
+  const x = i => serie.length > 1 ? m.left + margen + i * paso : m.left + ancho / 2;
 
   const baseVol = m.top + altoNps + hueco + altoVol;
   const maxVol = Math.max.apply(null, serie.map(s => s.total)) || 1;
   const yVol = v => baseVol - (v / maxVol) * altoVol;
-  const bw = Math.max(7, Math.min(34, (serie.length > 1 ? paso : ancho) * 0.36));
 
   let svg = '<svg viewBox="0 0 ' + A + ' ' + H + '" role="img" aria-label="Evolución del NPS">';
 
