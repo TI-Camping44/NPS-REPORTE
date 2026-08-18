@@ -148,6 +148,52 @@
   .cargando{opacity:.45;pointer-events:none}
   .oculto{display:none}
 
+
+  .filtros-hallazgos{
+    display:flex;gap:14px;flex-wrap:wrap;align-items:center;
+    margin:0 0 16px;padding:12px 16px;background:var(--panel);
+    border:1px solid var(--linea);border-radius:12px;
+  }
+  .filtros-hallazgos input[type="search"]{
+    flex:1;min-width:180px;font-family:var(--ui);font-size:13px;color:var(--tinta);
+    border:1px solid var(--linea);border-radius:7px;padding:7px 11px;background:var(--papel);
+  }
+  .obs li.clicable{cursor:pointer;border-radius:8px;transition:background .12s}
+  .obs li.clicable:hover{background:var(--papel)}
+  .obs li.clicable:focus-visible{outline:2px solid var(--promotor);outline-offset:2px}
+  tr.clicable{cursor:pointer}
+  tr.clicable:hover td{background:var(--papel)}
+  .sin-resultados{margin:14px 0 0;font-size:13px;color:var(--tinta-suave)}
+
+  .modal{
+    position:fixed;inset:0;background:rgba(18,33,28,.42);z-index:50;
+    display:flex;align-items:center;justify-content:center;padding:22px;
+  }
+  .modal[hidden]{display:none}
+  .modal-caja{
+    position:relative;background:var(--panel);border-radius:14px;padding:26px 28px;
+    max-width:520px;width:100%;max-height:85vh;overflow:auto;
+    box-shadow:0 18px 50px rgba(18,33,28,.22);
+  }
+  .modal-cerrar{
+    position:absolute;top:14px;right:16px;background:none;border:none;
+    font-size:22px;line-height:1;color:var(--tinta-suave);padding:4px 8px;border-radius:6px;
+  }
+  .modal-cerrar:hover{background:var(--papel);color:var(--tinta)}
+  .modal-encabezado{display:flex;align-items:center;gap:14px;margin:14px 0 16px}
+  .modal-encabezado .puntaje-chip{width:44px;height:44px;font-size:18px;border-radius:10px}
+  .modal-encabezado b{font-size:15px;font-weight:600;display:block}
+  .modal-encabezado em{font-style:normal;font-size:12.5px;color:var(--tinta-suave)}
+  .modal-texto{
+    margin:0 0 18px;font-size:15px;line-height:1.5;overflow-wrap:anywhere;
+    padding:14px 16px;background:var(--papel);border-radius:9px;
+  }
+  .modal-datos{margin:0;font-size:13.5px}
+  .modal-datos div{display:flex;gap:12px;padding:9px 0;border-top:1px solid var(--linea)}
+  .modal-datos dt{flex:none;width:100px;color:var(--tinta-suave);font-size:12px;
+    text-transform:uppercase;letter-spacing:.08em;padding-top:2px}
+  .modal-datos dd{margin:0;flex:1;font-family:var(--cifra);overflow-wrap:anywhere}
+
   @media (max-width:900px){
     .duo,.trio{grid-template-columns:1fr}
     .cabecera h1{font-size:24px}
@@ -291,7 +337,21 @@
     </section>
 
     <h2 class="titulo">Hallazgos del período</h2>
-    <p class="bajada">Comentarios de clientes y cierre para la reunión.</p>
+    <p class="bajada">Comentarios de clientes y cierre para la reunión. Tocá cualquiera para ver el detalle.</p>
+    <div class="filtros-hallazgos">
+      <div class="chips" id="filtroCat">
+        <button class="chip" data-cat="todos">Todos</button>
+        <button class="chip" data-cat="detractores">Detractores</button>
+        <button class="chip" data-cat="pasivos">Pasivos</button>
+        <button class="chip" data-cat="promotores">Promotores</button>
+      </div>
+      <div class="chips" id="filtroOrigen">
+        <button class="chip" data-origen="todos">Todo origen</button>
+        <button class="chip" data-origen="Formulario">Formulario</button>
+        <button class="chip" data-origen="Ventas">Ventas</button>
+      </div>
+      <input type="search" id="busqueda" placeholder="Buscar en texto, correo, cliente o vendedor…">
+    </div>
     <div class="duo">
       <section class="tarjeta alerta" id="tarjetaMejora" hidden>
         <div class="eyebrow">Puntos de mejora detectados</div>
@@ -319,6 +379,19 @@
     </section>
 
   </main>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="modalTitulo">
+    <button class="modal-cerrar" id="modalCerrar" aria-label="Cerrar">&times;</button>
+    <div class="eyebrow" id="modalTitulo">Detalle de la respuesta</div>
+    <div class="modal-encabezado">
+      <span class="puntaje-chip" id="modalChip">—</span>
+      <span><b id="modalCategoria">—</b><em id="modalFecha"></em></span>
+    </div>
+    <p class="modal-texto" id="modalTexto"></p>
+    <dl class="modal-datos" id="modalDatos"></dl>
+  </div>
 </div>
 
 <script>
@@ -361,6 +434,7 @@ let peticion = 0;
 function cargar(){
   marcarChips();
   document.getElementById('contenido').classList.add('cargando');
+  document.getElementById('actualizado').textContent = 'Consultando…';
 
   const parametros = new URLSearchParams({
     datos: '1', gran: estado.granularidad,
@@ -368,8 +442,14 @@ function cargar(){
   });
   const propia = ++peticion;
 
-  fetch(ENDPOINT + '?' + parametros.toString(), { method:'GET', redirect:'follow' })
+  // Sin esto, una petición colgada deja el tablero en gris para siempre y sin explicación.
+  const corte = new AbortController();
+  const reloj = setTimeout(function(){ corte.abort(); }, 45000);
+
+  fetch(ENDPOINT + '?' + parametros.toString(),
+        { method:'GET', redirect:'follow', signal: corte.signal })
     .then(function(r){
+      clearTimeout(reloj);
       if (!r.ok) throw new Error('El servidor respondió ' + r.status);
       return r.json();
     })
@@ -385,7 +465,16 @@ function cargar(){
       }
     })
     .catch(function(err){
+      clearTimeout(reloj);
       if (propia !== peticion) return;
+
+      if (err.name === 'AbortError'){
+        mostrarAviso('error', 'El Apps Script no respondió en 45 segundos',
+          'Suele ser la primera lectura del día, cuando vence la caché y tiene que releer las dos ' +
+          'planillas completas. Probá Actualizar. Si se repite, abrí la URL del /exec a mano para ver ' +
+          'si responde o pide iniciar sesión.');
+        return;
+      }
       mostrarAviso('error', 'No se pudo contactar al Apps Script',
         err.message + '. Revisá que la implementación siga activa y con acceso a cualquier usuario.');
     });
@@ -406,6 +495,8 @@ function recibir(d){
   }
 
   ocultarAviso();
+  ultimos = d;
+  marcarChipsHallazgos();
   pintarResumenNps(d);
   pintarDona(d.resumen);
   pintarDesglose(d.serie, d.granularidad);
@@ -431,6 +522,102 @@ function mostrarAviso(tipo, titulo, texto){
 function ocultarAviso(){
   document.getElementById('aviso').classList.add('oculto');
   document.getElementById('contenido').classList.remove('oculto');
+}
+
+
+/* ── Filtros de hallazgos y ventana de detalle ────────────────────────── */
+const hallazgos = { cat:'todos', origen:'todos', texto:'' };
+let ultimos = null;
+
+function categoria(p){
+  if (p === null || p === undefined) return 'sin puntaje';
+  return p >= 9 ? 'promotores' : p >= 7 ? 'pasivos' : 'detractores';
+}
+function nombreCategoria(p){
+  if (p === null || p === undefined) return 'Sin puntaje';
+  return p >= 9 ? 'Promotor' : p >= 7 ? 'Pasivo' : 'Detractor';
+}
+
+function pasaFiltro(o){
+  if (hallazgos.cat !== 'todos' && categoria(o.puntaje) !== hallazgos.cat) return false;
+  if (hallazgos.origen !== 'todos' && o.origen && o.origen !== hallazgos.origen) return false;
+  if (hallazgos.texto){
+    const t = hallazgos.texto.toLowerCase();
+    const campos = [o.texto, o.correo, o.cliente, o.factura, o.vendedor, o.equipo, o.fecha];
+    if (!campos.some(c => c && String(c).toLowerCase().indexOf(t) >= 0)) return false;
+  }
+  return true;
+}
+
+function marcarChipsHallazgos(){
+  document.querySelectorAll('#filtroCat .chip').forEach(b =>
+    b.setAttribute('aria-pressed', b.dataset.cat === hallazgos.cat));
+  document.querySelectorAll('#filtroOrigen .chip').forEach(b =>
+    b.setAttribute('aria-pressed', b.dataset.origen === hallazgos.origen));
+}
+
+function abrirModal(o){
+  document.getElementById('modalCategoria').textContent =
+    nombreCategoria(o.puntaje) + (o.puntaje === null || o.puntaje === undefined ? '' : ' · puntaje ' + o.puntaje);
+  document.getElementById('modalFecha').textContent =
+    (o.fecha || '—') + (o.origen ? ' · ' + o.origen : '');
+
+  const chip = document.getElementById('modalChip');
+  const sin = o.puntaje === null || o.puntaje === undefined;
+  chip.textContent = sin ? '—' : o.puntaje;
+  chip.style.background = sin ? '#9AA6A1' : colorPuntaje(o.puntaje);
+
+  document.getElementById('modalTexto').textContent = o.texto || 'Sin comentario registrado.';
+
+  const dl = document.getElementById('modalDatos');
+  dl.innerHTML = '';
+  [['Correo', o.correo], ['Cliente', o.cliente], ['Factura', o.factura],
+   ['Vendedor', o.vendedor], ['Equipo', o.equipo]]
+    .filter(par => par[1])
+    .forEach(function(par){
+      const fila = document.createElement('div');
+      const dt = document.createElement('dt'); dt.textContent = par[0];
+      const dd = document.createElement('dd'); dd.textContent = par[1];
+      fila.appendChild(dt); fila.appendChild(dd); dl.appendChild(fila);
+    });
+
+  if (!dl.children.length){
+    const fila = document.createElement('div');
+    const dd = document.createElement('dd');
+    dd.textContent = 'Sin datos de identificación: el respondente no dejó su correo.';
+    dd.style.fontFamily = 'var(--ui)'; dd.style.color = 'var(--tinta-suave)';
+    fila.appendChild(dd); dl.appendChild(fila);
+  }
+
+  document.getElementById('modal').hidden = false;
+  document.getElementById('modalCerrar').focus();
+}
+
+function cerrarModal(){ document.getElementById('modal').hidden = true; }
+
+document.getElementById('modalCerrar').addEventListener('click', cerrarModal);
+document.getElementById('modal').addEventListener('click', function(e){
+  if (e.target === this) cerrarModal();
+});
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape') cerrarModal();
+});
+
+document.getElementById('filtroCat').addEventListener('click', function(e){
+  const b = e.target.closest('.chip'); if (!b) return;
+  hallazgos.cat = b.dataset.cat; redibujarHallazgos();
+});
+document.getElementById('filtroOrigen').addEventListener('click', function(e){
+  const b = e.target.closest('.chip'); if (!b) return;
+  hallazgos.origen = b.dataset.origen; redibujarHallazgos();
+});
+document.getElementById('busqueda').addEventListener('input', function(){
+  hallazgos.texto = this.value.trim(); redibujarHallazgos();
+});
+
+function redibujarHallazgos(){
+  marcarChipsHallazgos();
+  if (ultimos){ pintarHallazgos(ultimos); pintarCorreos(ultimos.respondentes); }
 }
 
 /* ── NPS principal ───────────────────────────────────────────────────── */
@@ -704,12 +891,21 @@ function itemComentario(o){
 
   cuerpo.appendChild(texto); cuerpo.appendChild(meta);
   li.appendChild(chip); li.appendChild(cuerpo);
+
+  li.className = 'clicable';
+  li.tabIndex = 0;
+  li.addEventListener('click', function(){ abrirModal(o); });
+  li.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); abrirModal(o); }
+  });
   return li;
 }
 
 function pintarHallazgos(d){
   const datos = d.observaciones || { lista: [], total: 0, ocultasSinFecha: 0 };
-  const lista = datos.lista || [];
+  const todas = datos.lista || [];
+  const lista = todas.filter(pasaFiltro);
+  const filtrando = lista.length !== todas.length;
 
   const criticos = lista.filter(o => o.puntaje !== null && o.puntaje !== undefined && o.puntaje <= 8);
   const resto = lista.filter(o => o.puntaje === null || o.puntaje === undefined || o.puntaje > 8);
@@ -734,8 +930,12 @@ function pintarHallazgos(d){
     let pie = resto.length + (resto.length === 1 ? ' comentario' : ' comentarios');
     if (datos.total > lista.length) pie += ' · se muestran los más recientes de ' + datos.total;
     if (datos.ocultasSinFecha) pie += ' · ' + datos.ocultasSinFecha + ' sin fecha quedan fuera del período';
+    if (filtrando) pie += ' · filtrado de ' + todas.length;
     document.getElementById('obsPie').textContent = pie;
     resto.forEach(o => ulObs.appendChild(itemComentario(o)));
+  } else if (filtrando && todas.length){
+    tObs.hidden = false;
+    document.getElementById('obsPie').textContent = 'Ningún comentario coincide con el filtro.';
   } else tObs.hidden = true;
 
   pintarResumen(d, criticos);
@@ -784,11 +984,19 @@ function pintarResumen(d, criticos){
 }
 
 function pintarCorreos(lista){
+  /* eslint-disable no-param-reassign */
   const tarjeta = document.getElementById('tarjetaCorreos');
   const cuerpo = document.querySelector('#tablaCorreos tbody');
   cuerpo.innerHTML = '';
   if (!lista || !lista.length){ tarjeta.hidden = true; return; }
+  const todos = lista;
+  lista = todos.filter(pasaFiltro);
   tarjeta.hidden = false;
+
+  if (!lista.length){
+    document.getElementById('correosPie').textContent = 'Ningún respondente coincide con el filtro.';
+    return;
+  }
 
   const det = lista.filter(r => r.puntaje <= 6).length;
   document.getElementById('correosPie').textContent =
@@ -801,6 +1009,11 @@ function pintarCorreos(lista){
       const td = document.createElement('td'); td.textContent = v; tr.appendChild(td);
     });
     tr.lastChild.style.color = colorPuntaje(r.puntaje);
+    tr.className = 'clicable';
+    tr.addEventListener('click', function(){
+      abrirModal({ fecha:r.fecha, puntaje:r.puntaje, texto:r.comentario,
+                   origen:'Formulario', correo:r.correo });
+    });
     cuerpo.appendChild(tr);
   });
 }
@@ -822,7 +1035,9 @@ document.getElementById('granularidad').addEventListener('click', function(e){
   });
 });
 document.getElementById('btnActualizar').addEventListener('click', function(){ cargar(true); });
-setInterval(function(){ cargar(true); }, 5 * 60 * 1000);
+// El precalentado del lado del servidor mantiene los datos frescos;
+// acá basta con volver a pedirlos cada 15 minutos.
+setInterval(function(){ cargar(true); }, 15 * 60 * 1000);
 
 aplicarPreset('mes');
 cargar();
